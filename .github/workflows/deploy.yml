@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -18,32 +20,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      enabled: ${{ steps.pin.outputs.enabled }}
-      ref: ${{ steps.pin.outputs.ref }}
+      enabled: ${{ steps.source.outputs.enabled }}
+      ref: ${{ steps.source.outputs.ref }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate Shoes source pin
-        id: pin
-        shell: bash
-        run: |
-          if [[ ! -f shoes-ref ]]; then
-            echo '::error::shoes-ref is missing; set it to UNSET or a full cfal/shoes commit SHA.'
-            exit 1
-          fi
-          ref="$(< shoes-ref)"
-          bytes="$(wc -c < shoes-ref)"
-          if [[ "$ref" == UNSET && "$bytes" -eq 6 ]]; then
-            echo 'enabled=false' >> "$GITHUB_OUTPUT"
-            echo 'Documentation publication is disabled: shoes-ref is UNSET. Set it to a reachable cfal/shoes commit SHA to resume.' >> "$GITHUB_STEP_SUMMARY"
-          elif [[ "$bytes" -eq 41 && "$ref" =~ ^[0-9a-f]{40}$ ]]; then
-            echo 'enabled=true' >> "$GITHUB_OUTPUT"
-            echo "ref=$ref" >> "$GITHUB_OUTPUT"
-          else
-            echo '::error::shoes-ref must be exactly UNSET or one lowercase 40-character commit SHA, followed by a newline.'
-            exit 1
-          fi
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Test source selection
+        run: node --test scripts/resolve-source.test.mjs
+      - name: Resolve Shoes source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/resolve-source.mjs
 
   build:
     needs: source
@@ -51,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout pinned Shoes source
+      - name: Checkout resolved Shoes source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: cfal/shoes
@@ -64,12 +57,12 @@ jobs:
           EXPECTED_REF: ${{ needs.source.outputs.ref }}
         run: |
           if [[ "$(git -C shoes rev-parse HEAD)" != "$EXPECTED_REF" ]]; then
-            echo '::error::Checked-out Shoes commit does not match shoes-ref.'
+            echo '::error::Checked-out Shoes commit does not match the resolved source SHA.'
             exit 1
           fi
           for file in package.json package-lock.json .node-version; do
             if [[ ! -f "shoes/docs/$file" ]]; then
-              echo "::error::Pinned Shoes commit lacks docs/$file. Merge docs into cfal/shoes and update shoes-ref."
+              echo "::error::Resolved Shoes commit lacks docs/$file."
               exit 1
             fi
           done
@@ -83,19 +76,31 @@ jobs:
         working-directory: shoes/docs
         env:
           SHOES_DOCS_REF: ${{ needs.source.outputs.ref }}
-          SHOES_DOCS_LABEL: Unreleased / development
+          SHOES_DOCS_LABEL: dev
         run: |
           npm ci
           npm run check
+      - name: Record deployment revision
+        env:
+          SHOES_DOCS_REF: ${{ needs.source.outputs.ref }}
+        run: |
+          node --input-type=module <<'JS'
+          import { writeFileSync } from 'node:fs';
+          writeFileSync('shoes/docs/dist/deployment.json', JSON.stringify({
+            sourceRef: process.env.SHOES_DOCS_REF,
+            publicationRef: process.env.GITHUB_SHA,
+            channel: 'dev',
+          }) + '\n');
+          JS
       - name: Upload Pages artifact
-        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: shoes/docs/dist
 
   deploy:
     needs: [source, build]
-    if: needs.source.outputs.enabled == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: needs.source.outputs.enabled == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
