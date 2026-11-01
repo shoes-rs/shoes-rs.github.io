@@ -2,13 +2,13 @@
 
 This repository publishes the documentation at <https://shoes-rs.github.io/>. The complete Starlight project, prose, and canonical configuration examples live in [`cfal/shoes`](https://github.com/cfal/shoes/tree/master/docs). Change documentation alongside configuration code and examples in a Shoes PR; do not copy pages or generated HTML here.
 
-`shoes-ref` is the exact Shoes commit to build. It starts as `UNSET` because the documentation is not yet on the Shoes default branch. In that state the workflow reports publication disabled and neither builds nor deploys. Any other value must be a lowercase, full 40-character commit SHA with a trailing newline. Invalid pins fail verification.
+`shoes-ref` is the exact Shoes commit to build. It is pinned to the merged documentation source. Set it to `UNSET` to disable future builds and deployments; this does not remove an already published site. Any other value must be a lowercase, full 40-character commit SHA with a trailing newline. Invalid pins fail verification.
 
 ## First publication and updates
 
 1. Merge the Shoes documentation and example-validation CI. Confirm its `docs/` directory contains `package.json`, `package-lock.json`, and `.node-version`, and that `npm ci` and `npm run check` pass from `docs/` (`check` includes the build).
-2. Replace `UNSET` in `shoes-ref` with the full, reachable Shoes commit SHA that passed CI. Review the pin update here. Launch with `Unreleased / development` documentation at `/`. Set `SHOES_DOCS_LABEL` in the workflow to an explicit release version only when publishing its matching release commit.
-3. In this repository's GitHub Pages settings, select **GitHub Actions** as the build/deployment source. Merge the pin update into the default branch (`master`). The workflow builds the pinned Shoes source and deploys its `docs/dist/` artifact at `/`.
+2. Update `shoes-ref` to the full, reachable Shoes commit SHA that passed CI, replacing the previous pin or `UNSET`. Review the pin update here. Launch with `Unreleased / development` documentation at `/`. Set `SHOES_DOCS_LABEL` in the workflow to an explicit release version only when publishing its matching release commit.
+3. In this repository's GitHub Pages settings, select **GitHub Actions** as the build/deployment source. Merge the pin update into the default branch (`main`). The workflow builds the pinned Shoes source and deploys its `docs/dist/` artifact at `/`.
 
 The first cutover order is **merge Shoes docs, pin and publish this site, verify the live pages, then tag releases**. Shoes' new site links will not resolve between the merge and first publication. Do not tag a release containing those links before the site is live.
 

@@ -3,7 +3,7 @@ name: Documentation
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -36,7 +36,7 @@ jobs:
           bytes="$(wc -c < shoes-ref)"
           if [[ "$ref" == UNSET && "$bytes" -eq 6 ]]; then
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
-            echo 'Documentation publication is disabled: shoes-ref is UNSET. Merge the Shoes docs, then pin their reachable commit here.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'Documentation publication is disabled: shoes-ref is UNSET. Set it to a reachable cfal/shoes commit SHA to resume.' >> "$GITHUB_STEP_SUMMARY"
           elif [[ "$bytes" -eq 41 && "$ref" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'enabled=true' >> "$GITHUB_OUTPUT"
             echo "ref=$ref" >> "$GITHUB_OUTPUT"
